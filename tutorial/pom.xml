@@ -12,8 +12,8 @@
 
   <modules>
     <module>dfa-learner</module>
-    <module>mealy-learner</module>
-    <module>moore-learner</module>
+    <!-- <module>mealy-learner</module>
+    <module>moore-learner</module> -->
   </modules>
 
   <properties>
