@@ -43,6 +43,7 @@ import net.automatalib.words.impl.Alphabets;
 
 /**
  * This example demonstrates the classical Angluin LStar for DFAs.
+ * 
  * @author Masoud Ebrahimi
  */
 @SuppressWarnings("PMD.SystemPrintln")
@@ -55,6 +56,7 @@ public final class DFALearner {
     private DFAWMethodEQOracle<Character> eqOracle;
     GenericObservationTable<Character, Boolean> table;
     ObservationTableASCIIWriter<Character, Boolean> tableWriter;
+    DFA<?, Character> hypothesis;
 
     public static void main(String[] args) throws IOException {
         DFALearner experiment = new DFALearner();
@@ -81,41 +83,44 @@ public final class DFALearner {
         promptEnterKey("start learning");
 
         Integer round = 0;
-        DFA<?, Character> result;
         DefaultQuery<Character, Boolean> ce;
         while (true) {
 
-            // TODO: implement the learning loop
-            
-            if(true) {
+            closeTable();
+            consistentTable();
+            hypothesis = getHypothesisModel();
+            ce = eqOracle.findCounterExample(hypothesis, inputs);
+            if (ce == null) {
                 break;
             }
-
+            
+            // Print some useful information
             System.out.println("=======================================================");
             System.out.println(" Hypothesis " + (++round).toString() + ":");
             System.out.println("-------------------------------------------------------");
             tableWriter.write(table, System.out);
             System.out.println();
             System.out.println("Model: ");
-            GraphDOT.write(result, inputs, System.out);
-            Visualization.visualize(result, inputs);
+            GraphDOT.write(hypothesis, inputs, System.out);
             System.out.println("Counter example: " + ce.toString());
             System.out.println();
+            
+            refineTable(ce);
         }
 
         System.out.println("=======================================================");
         System.out.println("Final Hypothesis:");
         System.out.println("-------------------------------------------------------");
         System.out.println(mqOracle.getStatisticalData().getSummary());
-        System.out.println("Rounds: " + round.toString());
-        System.out.println("States: " + result.size());
+        System.out.println("Rounds: " + (++round).toString());
+        System.out.println("States: " + hypothesis.size());
         System.out.println("Sigma: " + inputs.size());
         System.out.println();
         System.out.println("Observation table:");
         tableWriter.write(table, System.out);
         System.out.println();
         System.out.println("Model: ");
-        GraphDOT.write(result, inputs, System.out); // may throw IOException!
+        GraphDOT.write(hypothesis, inputs, System.out); // may throw IOException!
     }
 
     protected static List<Word<Character>> initialPrefixes() {
@@ -140,7 +145,11 @@ public final class DFALearner {
         System.out.println();
         Visualization.visualize(nfa, inputs);
 
-        // TODO: Close the table
+        while (!table.isClosed()) {
+            Row<Character> unclosed = table.findUnclosedRow();
+            Word<Character> label = unclosed.getLabel();
+            table.addShortPrefixes(label.prefixes(false), mqOracle);
+        }
 
         nfa = getPartialModel();
         System.out.println("Closed hypothesis model: ");
@@ -166,7 +175,12 @@ public final class DFALearner {
         System.out.println();
         Visualization.visualize(nfa, inputs);
 
-        // TODO: Make the table consistent
+        Inconsistency<Character> inconsistency;
+        while (!table.isConsistent()) {
+            inconsistency = table.findInconsistency();
+            Word<Character> suffix = findDistinguishingSuffix(inconsistency);
+            table.addSuffixes(suffix.suffixes(false), mqOracle);
+        }
 
         nfa = getPartialModel();
         System.out.println("Consistent hypothesis model: ");
@@ -179,7 +193,8 @@ public final class DFALearner {
     }
 
     protected void refineTable(DefaultQuery<Character, Boolean> ce) throws IOException {
-        // TODO: Refine the table using cex
+        Word<Character> word = ce.getInput();
+        table.addShortPrefixes(word.prefixes(false), mqOracle);
 
         System.out.println();
         NFA<?, Character> nfa = getPartialModel();
@@ -192,7 +207,7 @@ public final class DFALearner {
     }
 
     protected CompactNFA<Character> getPartialModel() {
-        CompactNFA<Character> hypothesis = new CompactNFA<>(inputs);
+        CompactNFA<Character> model = new CompactNFA<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
 
         List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
@@ -200,7 +215,7 @@ public final class DFALearner {
 
         // Creating states
         for (Row<Character> row : shortPrefixRows) {
-            int state = hypothesis.addIntState( table.cellContents(row, table.getSuffixes().indexOf( Word.epsilon() )) );
+            int state = model.addIntState(table.cellContents(row, table.getSuffixes().indexOf(Word.epsilon())));
             stateMap.add(row.getRowContentId(), state);
         }
 
@@ -209,7 +224,7 @@ public final class DFALearner {
             int id = row.getRowContentId();
             if (stateMap.contains(id))
                 continue;
-            int state = hypothesis.addIntState( table.cellContents(row, table.getSuffixes().indexOf( Word.epsilon() )) );
+            int state = model.addIntState(table.cellContents(row, table.getSuffixes().indexOf(Word.epsilon())));
             stateMap.add(id, state);
         }
 
@@ -217,27 +232,27 @@ public final class DFALearner {
         for (Row<Character> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
-                hypothesis.setInitial(state, true);
+                model.setInitial(state, true);
             }
 
             for (int i = 0; i < inputs.size(); i++) {
                 Row<Character> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                hypothesis.addTransition(state, i, successorState);
+                model.addTransition(state, i, successorState);
             }
         }
-        return hypothesis;
+        return model;
     }
 
     protected CompactDFA<Character> getHypothesisModel() {
-        CompactDFA<Character> hypothesis = new CompactDFA<>(inputs);
+        CompactDFA<Character> model = new CompactDFA<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
 
         List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
 
         // Creating states
         for (Row<Character> row : shortPrefixRows) {
-            int state = hypothesis.addIntState( table.cellContents(row, table.getSuffixes().indexOf( Word.epsilon() )) );
+            int state = model.addIntState(table.cellContents(row, table.getSuffixes().indexOf(Word.epsilon())));
             stateMap.add(row.getRowContentId(), state);
         }
 
@@ -245,21 +260,22 @@ public final class DFALearner {
         for (Row<Character> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
-                hypothesis.setInitial(state, true);
+                model.setInitial(state, true);
             }
 
             for (int i = 0; i < inputs.size(); i++) {
                 Row<Character> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                Integer t = hypothesis.getTransition(state, inputs.getSymbol(i));
+                Integer t = model.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
-                    hypothesis.addTransition(state, inputs.getSymbol(i), successorState);
+                    model.addTransition(state, inputs.getSymbol(i), successorState);
             }
         }
-        return hypothesis;
+        return model;
     }
 
     protected Word<Character> findDistinguishingSuffix(Inconsistency<Character> inconsistency) {
+        // inconsistency = 2xrows + 1 input symbol
         int inputIdx = inputs.getSymbolIndex(inconsistency.getSymbol());
 
         Row<Character> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
