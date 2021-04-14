@@ -275,7 +275,7 @@ public final class DFALearner {
     }
 
     protected Word<Character> findDistinguishingSuffix(Inconsistency<Character> inconsistency) {
-        // inconsistency = 2xrows + 1 input symbol
+        // inconsistency = 2 x red rows + 1 input symbol
         int inputIdx = inputs.getSymbolIndex(inconsistency.getSymbol());
 
         Row<Character> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
