@@ -71,8 +71,7 @@ public final class MooreLearner {
         System.out.println("Learning the following Moore machine...");
         GraphDOT.write(target, target.getInputAlphabet(), System.out);
         GraphDOT.write(convertToMealy(target), target.getInputAlphabet(), System.out);
-        System.exit(0);
-
+        
         // @formatter:off
         inputs      = target.getInputAlphabet();
         sul         = new MealySimulatorOracle<>(convertToMealy(target));
@@ -148,10 +147,9 @@ public final class MooreLearner {
 
     protected static List<Word<Character>> initialSuffixes(Alphabet<Character> inputs) {
         List<Word<Character>> suffixes = new ArrayList<>();
-        
-        // TODO: fix initial suffixes
-        suffixes.add(Word.epsilon());
-        
+        for(Character symbol : inputs) {
+            suffixes.add(Word.fromLetter(symbol));
+        }
         return suffixes;
     }
 
@@ -301,10 +299,12 @@ public final class MooreLearner {
         List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
 
         // Creating states
+        Character firstLetter = inputs.getSymbol(0);
         for (Row<Character> row : shortPrefixRows) {
             if (stateMap.contains(row.getRowContentId()))
                 continue;
-            int state = hypothesis.addIntState(/*TODO: States output*/);
+            int columnId = table.getSuffixes().indexOf(Word.fromLetter(firstLetter));
+            int state = hypothesis.addIntState(table.cellContents(row, columnId).firstSymbol());
             stateMap.add(row.getRowContentId(), state);
             statePrefixMap.add(state, row.getLabel());
         }
@@ -351,8 +351,17 @@ public final class MooreLearner {
             CompactMoore<Character, Character> moore) {
         CompactMealy<Character, Character> mealy = new CompactMealy<>(moore.getInputAlphabet());
         
-        // TODO: Implement Moore to Mealy conversion method.
-
+        for(int i=0; i< moore.getStates().size(); i++ ) {
+            mealy.addState();
+        }
+        mealy.setInitialState(moore.getInitialState());
+        for(int state: moore.getStates()) {
+            Character output = moore.getStateOutput(state);
+            for( Character input : moore.getInputAlphabet() ) {
+                Integer successorState = moore.getSuccessor(state, input);
+                mealy.addTransition(state, input, successorState, output);
+            }
+        }
         return mealy;
     }
 
