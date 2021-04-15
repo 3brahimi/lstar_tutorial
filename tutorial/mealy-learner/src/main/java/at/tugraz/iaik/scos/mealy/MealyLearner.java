@@ -42,12 +42,14 @@ import net.automatalib.words.impl.Alphabets;
 
 /**
  * This is an example of classical LStar_M algorithm to learn Mealy Machines.
+ * 
  * @author Masoud Ebrahimi
  */
 @SuppressWarnings("PMD.SystemPrintln")
 public final class MealyLearner {
 
     private static final int EXPLORATION_DEPTH = 4;
+    private List<Word<Character>> statePrefixMap;
     private Alphabet<Character> inputs;
     private MealyMembershipOracle<Character, Character> sul;
     private MealyCounterOracle<Character, Character> mqOracle;
@@ -92,11 +94,11 @@ public final class MealyLearner {
         Integer round = 0;
         DefaultQuery<Character, Word<Character>> ce;
         while (true) {
-            
+
             closeTable();
             consistentTable();
             hypothesis = getHypothesisModel();
-            
+
             System.out.println("=======================================================");
             System.out.println(" Hypothesis " + (++round).toString() + ":");
             System.out.println("-------------------------------------------------------");
@@ -111,8 +113,8 @@ public final class MealyLearner {
                 break;
             System.out.println("Counter example: " + ce.toString());
             System.out.println();
-            
-            refineTableShortPrefixes(ce);
+
+            refineTableColumns(ce);
         }
 
         System.out.println("=======================================================");
@@ -208,9 +210,37 @@ public final class MealyLearner {
 
     protected void refineTableColumns(DefaultQuery<Character, Word<Character>> ce) throws IOException {
         promptEnterKey("refine the hypothesis");
+        Word<Character> word = ce.getInput();
 
-        // TODO: implmenet Rivest & Schappire method
-        
+        int state = 0;
+
+        Word<Character> query;
+        Word<Character> output;
+        Word<Character> suffix = Word.epsilon();
+
+        Character lastOutputSymbol;
+        Character prevLastOutputSymbol = ce.getOutput().lastSymbol();
+        for (Word<Character> prefix : word.prefixes(false)) {
+            suffix = word.suffix(word.length() - prefix.length());
+
+            state = hypothesis.getState(prefix);
+            query = statePrefixMap.get(state).concat(suffix);
+
+            output = mqOracle.answerQuery(query);
+            lastOutputSymbol = output.lastSymbol();
+            if( !prevLastOutputSymbol.equals(lastOutputSymbol) ) {
+                break;
+            }
+        }
+
+        if (suffix.length()>0) {
+        List<Word<Character>> suffixes = new ArrayList<>(suffix.suffixes(false));
+        suffixes.remove(Word.epsilon());
+        table.addSuffixes(suffixes, mqOracle);
+        } else {
+            refineTableShortPrefixes(ce);
+        }
+
         System.out.println("Refined table: ");
         tableWriter.write(table, System.out);
     }
@@ -247,7 +277,8 @@ public final class MealyLearner {
             for (int i = 0; i < inputs.size(); i++) {
                 Row<Character> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                Word<Character> output = table.cellContents(row, table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
+                Word<Character> output = table.cellContents(row,
+                        table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
                 CompactMealyTransition<Character> t = hypothesis.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
                     hypothesis.addTransition(state, inputs.getSymbol(i), successorState, output.firstSymbol());
@@ -260,6 +291,7 @@ public final class MealyLearner {
         promptEnterKey("extract the hypothesis");
         CompactMealy<Character, Character> hypothesis = new CompactMealy<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
+        statePrefixMap = new ArrayList<>(table.numberOfRows());
 
         List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
 
@@ -269,6 +301,7 @@ public final class MealyLearner {
                 continue;
             int state = hypothesis.addIntState();
             stateMap.add(row.getRowContentId(), state);
+            statePrefixMap.add(state, row.getLabel());
         }
 
         // Transition relation
@@ -281,7 +314,8 @@ public final class MealyLearner {
             for (int i = 0; i < inputs.size(); i++) {
                 Row<Character> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                Word<Character> output = table.cellContents(row, table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
+                Word<Character> output = table.cellContents(row,
+                        table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
                 CompactMealyTransition<Character> t = hypothesis.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
                     hypothesis.addTransition(state, inputs.getSymbol(i), successorState, output.firstSymbol());
@@ -325,35 +359,34 @@ public final class MealyLearner {
     private static CompactMealy<Character, Character> constructSUL() {
         // input alphabet contains characters 'a'..'b'
         Alphabet<Character> inputs = Alphabets.characters('a', 'c');
-        Character x = 'x', y = 'y', z = 'z';
-
+        
         // @formatter:off
         // create automaton
         CompactMealy<Character, Object> mealy = 
             AutomatonBuilders.newMealy(inputs)
                 .withInitial("q0")
                 .from("q0")
-                    .on('a').withOutput(x).to("q1")
-                    .on('b').withOutput(x).to("q2")
-                    .on('c').withOutput(x).to("q0")
+                    .on('a').withOutput('x').to("q1")
+                    .on('b').withOutput('x').to("q2")
+                    .on('c').withOutput('x').to("q0")
                 .from("q1")
-                    .on('a').withOutput(y).to("q1")
-                    .on('b').withOutput(y).to("q2")
-                    .on('c').withOutput(y).to("q0")
+                    .on('a').withOutput('y').to("q1")
+                    .on('b').withOutput('y').to("q2")
+                    .on('c').withOutput('y').to("q0")
                 .from("q2")
-                    .on('a').withOutput(z).to("q0")
-                    .on('b').withOutput(z).to("q1")
-                    .on('c').withOutput(z).to("q3")
+                    .on('a').withOutput('z').to("q0")
+                    .on('b').withOutput('z').to("q1")
+                    .on('c').withOutput('z').to("q3")
                 .from("q3")
-                    .on('a').withOutput(x).to("q0")
-                    .on('b').withOutput(x).to("q1")
-                    .on('c').withOutput(x).to("q2")
+                    .on('a').withOutput('x').to("q0")
+                    .on('b').withOutput('x').to("q1")
+                    .on('c').withOutput('x').to("q2")
                 .create();
         // @formatter:on
 
         CompactMealy<Character, Character> result = new CompactMealy<>(inputs);
 
-        for (int i=0; i < mealy.getStates().size(); i++ ) {
+        for (int i = 0; i < mealy.getStates().size(); i++) {
             result.addState();
         }
 
