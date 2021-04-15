@@ -53,6 +53,7 @@ public final class MealyLearner {
     private Alphabet<Character> inputs;
     private MealyMembershipOracle<Character, Character> sul;
     private MealyCounterOracle<Character, Character> mqOracle;
+    private MealyCounterOracle<Character, Character> eqMqOracle;
     private MealyWMethodEQOracle<Character, Character> eqOracle;
     GenericObservationTable<Character, Word<Character>> table;
     ObservationTableASCIIWriter<Character, Word<Character>> tableWriter;
@@ -71,7 +72,8 @@ public final class MealyLearner {
         inputs      = target.getInputAlphabet();
         sul         = new MealySimulatorOracle<>(target);
         mqOracle    = new MealyCounterOracle<>(sul, "Output Queries");
-        eqOracle    = new MealyWMethodEQOracle<>(mqOracle, EXPLORATION_DEPTH);
+        eqMqOracle    = new MealyCounterOracle<>(sul, "Output Queries during EQ testing");
+        eqOracle    = new MealyWMethodEQOracle<>(eqMqOracle, EXPLORATION_DEPTH);
         table       = new GenericObservationTable<>(inputs);
         tableWriter = new ObservationTableASCIIWriter<>();
         // @formatter:on
@@ -121,6 +123,7 @@ public final class MealyLearner {
         System.out.println("Final Hypothesis:");
         System.out.println("-------------------------------------------------------");
         System.out.println(mqOracle.getStatisticalData().getSummary());
+        System.out.println(eqMqOracle.getStatisticalData().getSummary());
         System.out.println("Table size: " + table.numberOfRows() * table.numberOfSuffixes());
         System.out.println("Rounds: " + (++round).toString());
         System.out.println("States: " + hypothesis.size());
@@ -234,9 +237,9 @@ public final class MealyLearner {
         }
 
         if (suffix.length()>0) {
-        List<Word<Character>> suffixes = new ArrayList<>(suffix.suffixes(false));
-        suffixes.remove(Word.epsilon());
-        table.addSuffixes(suffixes, mqOracle);
+            List<Word<Character>> suffixes = new ArrayList<>(suffix.suffixes(false));
+            suffixes.remove(Word.epsilon());
+            table.addSuffixes(suffixes, mqOracle);
         } else {
             refineTableShortPrefixes(ce);
         }
