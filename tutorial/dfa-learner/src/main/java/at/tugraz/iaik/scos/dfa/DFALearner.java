@@ -87,7 +87,7 @@ public final class DFALearner {
         while (true) {
 
             closeTable();
-            consistentTable();
+            if(consistentTable()) continue;
             hypothesis = getHypothesisModel();
             ce = eqOracle.findCounterExample(hypothesis, inputs);
             if (ce == null) {
@@ -161,9 +161,9 @@ public final class DFALearner {
         Visualization.visualize(nfa, inputs);
     }
 
-    protected void consistentTable() throws IOException {
+    protected boolean consistentTable() throws IOException {
         if (table.isConsistent())
-            return;
+            return false;
 
         System.out.println("=======================================================");
         System.out.println(" Consistent Observation Table");
@@ -190,6 +190,7 @@ public final class DFALearner {
         System.out.println("Consistent table: ");
         tableWriter.write(table, System.out);
         Visualization.visualize(nfa, inputs);
+        return true;
     }
 
     protected void refineTable(DefaultQuery<Character, Boolean> ce) throws IOException {

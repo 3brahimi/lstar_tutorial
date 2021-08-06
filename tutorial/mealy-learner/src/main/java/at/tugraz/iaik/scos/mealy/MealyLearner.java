@@ -98,7 +98,7 @@ public final class MealyLearner {
         while (true) {
 
             closeTable();
-            consistentTable();
+            if(consistentTable()) continue;
             hypothesis = getHypothesisModel();
 
             System.out.println("=======================================================");
@@ -178,9 +178,9 @@ public final class MealyLearner {
         tableWriter.write(table, System.out);
     }
 
-    protected void consistentTable() throws IOException {
+    protected boolean consistentTable() throws IOException {
         if (table.isConsistent())
-            return;
+            return false;
 
         promptEnterKey("make the table consistent");
         System.out.println("=======================================================");
@@ -200,6 +200,7 @@ public final class MealyLearner {
 
         System.out.println("Consistent table: ");
         tableWriter.write(table, System.out);
+        return true;
     }
 
     protected void refineTableShortPrefixes(DefaultQuery<Character, Word<Character>> ce) throws IOException {

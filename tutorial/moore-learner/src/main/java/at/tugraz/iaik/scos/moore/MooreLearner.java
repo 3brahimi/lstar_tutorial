@@ -101,7 +101,7 @@ public final class MooreLearner {
         while (true) {
             round++;
             closeTable();
-            consistentTable();
+            if(consistentTable()) continue;
             mooreHypothesis = getHypothesisModel();
             mealyHypothesis = convertToMealy(mooreHypothesis);
 
@@ -182,9 +182,9 @@ public final class MooreLearner {
         tableWriter.write(table, System.out);
     }
 
-    protected void consistentTable() throws IOException {
+    protected boolean consistentTable() throws IOException {
         if (table.isConsistent())
-            return;
+            return false;
 
         promptEnterKey("make the table consistent");
         System.out.println("=======================================================");
@@ -204,6 +204,7 @@ public final class MooreLearner {
 
         System.out.println("Consistent table: ");
         tableWriter.write(table, System.out);
+        return true;
     }
 
     protected void refineTableShortPrefixes(DefaultQuery<Character, Word<Character>> ce) throws IOException {
