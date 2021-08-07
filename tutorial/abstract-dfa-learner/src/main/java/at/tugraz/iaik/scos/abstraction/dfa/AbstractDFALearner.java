@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package at.tugraz.iaik.scos.dfa;
+package at.tugraz.iaik.scos.abstraction.dfa;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,7 +35,6 @@ import net.automatalib.automata.fsa.NFA;
 import net.automatalib.automata.fsa.impl.compact.CompactDFA;
 import net.automatalib.automata.fsa.impl.compact.CompactNFA;
 import net.automatalib.serialization.dot.GraphDOT;
-import net.automatalib.util.automata.builders.AutomatonBuilders;
 import net.automatalib.visualization.Visualization;
 import net.automatalib.words.Alphabet;
 import net.automatalib.words.Word;
@@ -50,31 +49,36 @@ import net.automatalib.words.impl.Alphabets;
 public final class AbstractDFALearner {
 
     private static final int EXPLORATION_DEPTH = 4;
-    private Alphabet<Character> inputs;
-    private DFAMembershipOracle<Character> sul;
-    private DFACounterOracle<Character> mqOracle;
-    private DFAWMethodEQOracle<Character> eqOracle;
-    GenericObservationTable<Character, Boolean> table;
-    ObservationTableASCIIWriter<Character, Boolean> tableWriter;
-    DFA<?, Character> hypothesis;
+    private Alphabet<Integer> inputs;
+    private List<Word<Integer>> statePrefixMap;
+    private DFAMembershipOracle<Integer> sul;
+    private DFACounterOracle<Integer> mqOracle;
+    private DFACounterOracle<Integer> eqMqOracle;
+    private DFAWMethodEQOracle<Integer> eqOracle;
+    GenericObservationTable<Integer, Boolean> table;
+    ObservationTableASCIIWriter<Integer, Boolean> tableWriter;
+    DFA<?, Integer> hypothesis;
 
     public static void main(String[] args) throws IOException {
         AbstractDFALearner experiment = new AbstractDFALearner();
-        experiment.learn(constructSUL());
+        experiment.learn(constructSUL(7));
     }
 
-    public void learn(CompactDFA<Character> target) throws IOException {
+    public void learn(CompactDFA<Integer> target) throws IOException {
         // @formatter:off
-        inputs      = target.getInputAlphabet();
+        inputs      = Alphabets.integers(1, 4);
         sul         = new DFASimulatorOracle<>(target);
         mqOracle    = new DFACounterOracle<>(sul, "Membership Queries");
-        eqOracle    = new DFAWMethodEQOracle<>(mqOracle, EXPLORATION_DEPTH);
-        table       = new GenericObservationTable<Character, Boolean>(inputs);
+        eqMqOracle  = new DFACounterOracle<>(sul, "Membership Queries (Conformance Testing)");
+        eqOracle    = new DFAWMethodEQOracle<>(eqMqOracle, EXPLORATION_DEPTH);
+        table       = new GenericObservationTable<Integer, Boolean>(inputs);
         tableWriter = new ObservationTableASCIIWriter<>(input -> input.toString(), output -> (output ? "1" : "0"), true);
         // @formatter:on
 
-        List<Word<Character>> prefixes = initialPrefixes();
-        List<Word<Character>> suffixes = initialSuffixes();
+        Visualization.visualize(target, inputs);
+
+        List<Word<Integer>> prefixes = initialPrefixes();
+        List<Word<Integer>> suffixes = initialSuffixes();
         table.initialize(prefixes, suffixes, mqOracle);
         System.out.println("=======================================================");
         System.out.println(" Initialized Observation Table");
@@ -83,7 +87,7 @@ public final class AbstractDFALearner {
         promptEnterKey("start learning");
 
         Integer round = 0;
-        DefaultQuery<Character, Boolean> ce;
+        DefaultQuery<Integer, Boolean> ce;
         while (true) {
 
             closeTable();
@@ -105,13 +109,14 @@ public final class AbstractDFALearner {
             System.out.println("Counter example: " + ce.toString());
             System.out.println();
             
-            refineTable(ce);
+            refineTableColumns(ce);
         }
 
         System.out.println("=======================================================");
         System.out.println("Final Hypothesis:");
         System.out.println("-------------------------------------------------------");
         System.out.println(mqOracle.getStatisticalData().getSummary());
+        System.out.println(eqMqOracle.getStatisticalData().getSummary());
         System.out.println("Rounds: " + (++round).toString());
         System.out.println("States: " + hypothesis.size());
         System.out.println("Sigma: " + inputs.size());
@@ -121,13 +126,14 @@ public final class AbstractDFALearner {
         System.out.println();
         System.out.println("Model: ");
         GraphDOT.write(hypothesis, inputs, System.out); // may throw IOException!
+        Visualization.visualize(hypothesis, inputs);
     }
 
-    protected static List<Word<Character>> initialPrefixes() {
+    protected static List<Word<Integer>> initialPrefixes() {
         return Collections.singletonList(Word.epsilon());
     }
 
-    protected static List<Word<Character>> initialSuffixes() {
+    protected static List<Word<Integer>> initialSuffixes() {
         return Collections.singletonList(Word.epsilon());
     }
 
@@ -139,15 +145,15 @@ public final class AbstractDFALearner {
         System.out.println(" Closing Observation Table");
         System.out.println("-------------------------------------------------------");
 
-        NFA<?, Character> nfa = getPartialModel();
+        NFA<?, Integer> nfa = getPartialModel();
         System.out.println("Open hypothesis model: ");
         GraphDOT.write(nfa, inputs, System.out);
         System.out.println();
         Visualization.visualize(nfa, inputs);
 
         while (!table.isClosed()) {
-            Row<Character> unclosed = table.findUnclosedRow();
-            Word<Character> label = unclosed.getLabel();
+            Row<Integer> unclosed = table.findUnclosedRow();
+            Word<Integer> label = unclosed.getLabel();
             table.addShortPrefixes(label.prefixes(false), mqOracle);
         }
 
@@ -169,16 +175,16 @@ public final class AbstractDFALearner {
         System.out.println(" Consistent Observation Table");
         System.out.println("-------------------------------------------------------");
 
-        NFA<?, Character> nfa = getPartialModel();
+        NFA<?, Integer> nfa = getPartialModel();
         System.out.println("Inconsistent hypothesis model: ");
         GraphDOT.write(nfa, inputs, System.out);
         System.out.println();
         Visualization.visualize(nfa, inputs);
 
-        Inconsistency<Character> inconsistency;
+        Inconsistency<Integer> inconsistency;
         while (!table.isConsistent()) {
             inconsistency = table.findInconsistency();
-            Word<Character> suffix = findDistinguishingSuffix(inconsistency);
+            Word<Integer> suffix = findDistinguishingSuffix(inconsistency);
             table.addSuffixes(suffix.suffixes(false), mqOracle);
         }
 
@@ -193,35 +199,54 @@ public final class AbstractDFALearner {
         return true;
     }
 
-    protected void refineTable(DefaultQuery<Character, Boolean> ce) throws IOException {
-        Word<Character> word = ce.getInput();
-        table.addShortPrefixes(word.prefixes(false), mqOracle);
+    protected void refineTableColumns(DefaultQuery<Integer, Boolean> ce) throws IOException {
+        promptEnterKey("refine the hypothesis");
+        Word<Integer> word = ce.getInput();
 
-        System.out.println();
-        NFA<?, Character> nfa = getPartialModel();
-        System.out.println("Refined partial model: ");
-        GraphDOT.write(nfa, inputs, System.out);
-        System.out.println();
+        Integer state = 0;
+
+        Word<Integer> query;
+        Word<Integer> suffix = Word.epsilon();
+
+        Boolean lastOutputSymbol;
+        Boolean prevLastOutputSymbol = ce.getOutput();
+        for (Word<Integer> prefix : word.prefixes(false)) {
+            suffix = word.suffix(word.length() - prefix.length());
+
+            state = (Integer) hypothesis.getState(prefix);
+            query = statePrefixMap.get(state).concat(suffix);
+
+            lastOutputSymbol = eqMqOracle.answerQuery(query);
+            if( !prevLastOutputSymbol.equals(lastOutputSymbol) ) {
+                break;
+            }
+        }
+
+        if (suffix.length()>0) {
+            List<Word<Integer>> suffixes = new ArrayList<>(suffix.suffixes(false));
+            suffixes.remove(Word.epsilon());
+            table.addSuffixes(suffixes, mqOracle);
+        }
+
         System.out.println("Refined table: ");
         tableWriter.write(table, System.out);
-        Visualization.visualize(nfa, inputs);
     }
 
-    protected CompactNFA<Character> getPartialModel() {
-        CompactNFA<Character> model = new CompactNFA<>(inputs);
+    protected CompactNFA<Integer> getPartialModel() {
+        CompactNFA<Integer> model = new CompactNFA<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
 
-        List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
-        List<Row<Character>> allRows = new ArrayList<>(table.getAllRows());
+        List<Row<Integer>> shortPrefixRows = table.getShortPrefixRows();
+        List<Row<Integer>> allRows = new ArrayList<>(table.getAllRows());
 
         // Creating states
-        for (Row<Character> row : shortPrefixRows) {
+        for (Row<Integer> row : shortPrefixRows) {
             int state = model.addIntState(table.cellContents(row, table.getSuffixes().indexOf(Word.epsilon())));
             stateMap.add(row.getRowContentId(), state);
         }
 
         // Creating dummy states
-        for (Row<Character> row : allRows) {
+        for (Row<Integer> row : allRows) {
             int id = row.getRowContentId();
             if (stateMap.contains(id))
                 continue;
@@ -230,14 +255,14 @@ public final class AbstractDFALearner {
         }
 
         // Transition relation
-        for (Row<Character> row : shortPrefixRows) {
+        for (Row<Integer> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
                 model.setInitial(state, true);
             }
 
             for (int i = 0; i < inputs.size(); i++) {
-                Row<Character> successorRow = row.getSuccessor(i);
+                Row<Integer> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
                 model.addTransition(state, i, successorState);
             }
@@ -245,27 +270,29 @@ public final class AbstractDFALearner {
         return model;
     }
 
-    protected CompactDFA<Character> getHypothesisModel() {
-        CompactDFA<Character> model = new CompactDFA<>(inputs);
+    protected CompactDFA<Integer> getHypothesisModel() {
+        CompactDFA<Integer> model = new CompactDFA<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
+        statePrefixMap = new ArrayList<>(table.numberOfRows());
 
-        List<Row<Character>> shortPrefixRows = table.getShortPrefixRows();
+        List<Row<Integer>> shortPrefixRows = table.getShortPrefixRows();
 
         // Creating states
-        for (Row<Character> row : shortPrefixRows) {
+        for (Row<Integer> row : shortPrefixRows) {
             int state = model.addIntState(table.cellContents(row, table.getSuffixes().indexOf(Word.epsilon())));
             stateMap.add(row.getRowContentId(), state);
+            statePrefixMap.add(state, row.getLabel());
         }
 
         // Transition relation
-        for (Row<Character> row : shortPrefixRows) {
+        for (Row<Integer> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
                 model.setInitial(state, true);
             }
 
             for (int i = 0; i < inputs.size(); i++) {
-                Row<Character> successorRow = row.getSuccessor(i);
+                Row<Integer> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
                 Integer t = model.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
@@ -275,12 +302,12 @@ public final class AbstractDFALearner {
         return model;
     }
 
-    protected Word<Character> findDistinguishingSuffix(Inconsistency<Character> inconsistency) {
+    protected Word<Integer> findDistinguishingSuffix(Inconsistency<Integer> inconsistency) {
         // inconsistency = 2 x red rows + 1 input symbol
         int inputIdx = inputs.getSymbolIndex(inconsistency.getSymbol());
 
-        Row<Character> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
-        Row<Character> secondSuccessor = inconsistency.getSecondRow().getSuccessor(inputIdx);
+        Row<Integer> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
+        Row<Integer> secondSuccessor = inconsistency.getSecondRow().getSuccessor(inputIdx);
 
         int numSuffixes = table.getSuffixes().size();
 
@@ -288,8 +315,8 @@ public final class AbstractDFALearner {
             Boolean firstOutput = table.cellContents(firstSuccessor, i);
             Boolean secondOutput = table.cellContents(secondSuccessor, i);
             if (!firstOutput.equals(secondOutput)) {
-                Character sym = inputs.getSymbol(inputIdx);
-                Word<Character> suffix = table.getSuffixes().get(i);
+                Integer sym = inputs.getSymbol(inputIdx);
+                Word<Integer> suffix = table.getSuffixes().get(i);
                 return suffix.prepend(sym);
             }
         }
@@ -310,28 +337,22 @@ public final class AbstractDFALearner {
      *
      * @return example dfa
      */
-    public static CompactDFA<Character> constructSUL() {
-        // input alphabet contains characters 'a'..'b'
-        Alphabet<Character> sigma = Alphabets.characters('a', 'b');
+    public static CompactDFA<Integer> constructSUL(int n) {
+        // input alphabet contains Integers 'a'..'b'
+        Alphabet<Integer> sigma = Alphabets.integers(1, 1000);
 
         // @formatter:off
         // create automaton
-        return AutomatonBuilders.newDFA(sigma)
-                .withInitial("q0")
-                .from("q0")
-                    .on('a').to("q1")
-                    .on('b').to("q2")
-                .from("q1")
-                    .on('a').to("q0")
-                    .on('b').to("q3")
-                .from("q2")
-                    .on('a').to("q3")
-                    .on('b').to("q0")
-                .from("q3")
-                    .on('a').to("q2")
-                    .on('b').to("q1")
-                .withAccepting("q0")
-                .create();
-        // @formatter:on
+        CompactDFA<Integer> dfa = new CompactDFA<>(sigma);
+        
+        dfa.addInitialState(false);
+        for(int i=1; i < n - 1; i++)
+            dfa.addState(i%2==1);
+        dfa.addState(n%2==0);
+        
+        for (Integer state: dfa.getStates())
+            for( Integer in : sigma )
+                dfa.addTransition(state, in, (in + state) % n);
+        return dfa;
     }
 }
