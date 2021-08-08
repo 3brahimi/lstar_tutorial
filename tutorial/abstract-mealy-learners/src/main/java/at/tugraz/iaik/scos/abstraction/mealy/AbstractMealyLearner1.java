@@ -21,20 +21,23 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import de.learnlib.api.SUL;
 import de.learnlib.api.oracle.MembershipOracle.MealyMembershipOracle;
 import de.learnlib.api.query.DefaultQuery;
-import de.learnlib.datastructure.observationtable.Row;
 import de.learnlib.datastructure.observationtable.GenericObservationTable;
 import de.learnlib.datastructure.observationtable.Inconsistency;
+import de.learnlib.datastructure.observationtable.Row;
 import de.learnlib.datastructure.observationtable.writer.ObservationTableASCIIWriter;
+import de.learnlib.driver.util.MealySimulatorSUL;
 import de.learnlib.filter.statistic.oracle.MealyCounterOracle;
+import de.learnlib.mapper.SULMappers;
+import de.learnlib.mapper.api.SULMapper;
 import de.learnlib.oracle.equivalence.MealyWMethodEQOracle;
-import de.learnlib.oracle.membership.SimulatorOracle.MealySimulatorOracle;
+import de.learnlib.oracle.membership.SULOracle;
 import net.automatalib.automata.transducers.MealyMachine;
 import net.automatalib.automata.transducers.impl.compact.CompactMealy;
 import net.automatalib.automata.transducers.impl.compact.CompactMealyTransition;
 import net.automatalib.serialization.dot.GraphDOT;
-import net.automatalib.util.automata.builders.AutomatonBuilders;
 import net.automatalib.visualization.Visualization;
 import net.automatalib.words.Alphabet;
 import net.automatalib.words.Word;
@@ -49,28 +52,28 @@ import net.automatalib.words.impl.Alphabets;
 public final class AbstractMealyLearner1 {
 
     private static final int EXPLORATION_DEPTH = 4;
-    private List<Word<Integer>> statePrefixMap;
-    private Alphabet<Integer> inputs;
-    private MealyMembershipOracle<Integer, Integer> sul;
-    private MealyCounterOracle<Integer, Integer> mqOracle;
-    private MealyCounterOracle<Integer, Integer> eqMqOracle;
-    private MealyWMethodEQOracle<Integer, Integer> eqOracle;
-    GenericObservationTable<Integer, Word<Integer>> table;
-    ObservationTableASCIIWriter<Integer, Word<Integer>> tableWriter;
-    MealyMachine<Integer, Integer, CompactMealyTransition<Integer>, Integer> hypothesis;
+    private List<Word<String>> statePrefixMap;
+    private Alphabet<String> inputs;
+    private MealyMembershipOracle<String, String> sul;
+    private MealyCounterOracle<String, String> mqOracle;
+    private MealyCounterOracle<String, String> eqMqOracle;
+    private MealyWMethodEQOracle<String, String> eqOracle;
+    GenericObservationTable<String, Word<String>> table;
+    ObservationTableASCIIWriter<String, Word<String>> tableWriter;
+    MealyMachine<Integer, String, ?, String> hypothesis;
 
     public static void main(String[] args) throws IOException {
         AbstractMealyLearner1 experiment = new AbstractMealyLearner1();
-        experiment.learn(constructSUL(2));
+        MyMapper mapper = new MyMapper();
+        MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(constructSUL(2));
+        SUL<String, String> sul = SULMappers.apply(mapper, simulator);
+        experiment.learn(sul);
     }
 
-    protected void learn(CompactMealy<Integer, Integer> target) throws IOException {
-        System.out.println("Learning the following Mealy machine...");
-        GraphDOT.write(target, target.getInputAlphabet(), System.out);
-
+    protected void learn(SUL<String, String> target) throws IOException {
         // @formatter:off
-        inputs      = Alphabets.integers(1, 3);
-        sul         = new MealySimulatorOracle<>(target);
+        inputs      = Alphabets.fromArray(new String[]{"1","2","3"});
+        sul         = new SULOracle<>(target);
         mqOracle    = new MealyCounterOracle<>(sul, "Output Queries");
         eqMqOracle  = new MealyCounterOracle<>(sul, "Output Queries during EQ testing");
         eqOracle    = new MealyWMethodEQOracle<>(eqMqOracle, EXPLORATION_DEPTH);
@@ -84,8 +87,8 @@ public final class AbstractMealyLearner1 {
         tableWriter.write(table, System.out);
         promptEnterKey("initialize the table");
 
-        List<Word<Integer>> prefixes = initialPrefixes();
-        List<Word<Integer>> suffixes = initialSuffixes(inputs);
+        List<Word<String>> prefixes = initialPrefixes();
+        List<Word<String>> suffixes = initialSuffixes(inputs);
         table.initialize(prefixes, suffixes, mqOracle);
         System.out.println("=======================================================");
         System.out.println(" Initialized Observation Table");
@@ -94,11 +97,12 @@ public final class AbstractMealyLearner1 {
         promptEnterKey("start learning");
 
         Integer round = 0;
-        DefaultQuery<Integer, Word<Integer>> ce;
+        DefaultQuery<String, Word<String>> ce;
         while (true) {
 
             closeTable();
             if(consistentTable()) continue;
+
             hypothesis = getHypothesisModel();
 
             System.out.println("=======================================================");
@@ -108,14 +112,13 @@ public final class AbstractMealyLearner1 {
             System.out.println();
             System.out.println("Model: ");
             GraphDOT.write(hypothesis, inputs, System.out);
+
             promptEnterKey("test the hypothesis");
 
             ce = eqOracle.findCounterExample(hypothesis, inputs);
-            if (ce == null)
-                break;
-            System.out.println("Counter example: " + ce.toString());
-            System.out.println();
+            if (ce == null) break;
 
+            System.out.println("Counter example: " + ce.toString());
             refineTableColumns(ce);
         }
 
@@ -137,13 +140,13 @@ public final class AbstractMealyLearner1 {
         Visualization.visualize(hypothesis, inputs);
     }
 
-    protected static List<Word<Integer>> initialPrefixes() {
+    protected static List<Word<String>> initialPrefixes() {
         return Collections.singletonList(Word.epsilon());
     }
 
-    protected static List<Word<Integer>> initialSuffixes(Alphabet<Integer> inputs) {
-        List<Word<Integer>> suffixes = new ArrayList<>();
-        for (Integer c : inputs) {
+    protected static List<Word<String>> initialSuffixes(Alphabet<String> inputs) {
+        List<Word<String>> suffixes = new ArrayList<>();
+        for (String c : inputs) {
             suffixes.add(Word.fromSymbols(c));
         }
         return suffixes;
@@ -158,14 +161,14 @@ public final class AbstractMealyLearner1 {
         System.out.println(" Closing Observation Table");
         System.out.println("-------------------------------------------------------");
 
-        CompactMealy<Integer, Integer> model = getPartialModel();
+        CompactMealy<String, String> model = getPartialModel();
         System.out.println("Open hypothesis model: ");
         GraphDOT.write(model, inputs, System.out);
         System.out.println();
 
         while (!table.isClosed()) {
-            Row<Integer> unclosed = table.findUnclosedRow();
-            Word<Integer> prefix = unclosed.getLabel();
+            Row<String> unclosed = table.findUnclosedRow();
+            Word<String> prefix = unclosed.getLabel();
             table.addShortPrefixes(prefix.prefixes(false), mqOracle.asOracle());
         }
 
@@ -187,12 +190,12 @@ public final class AbstractMealyLearner1 {
         System.out.println(" Consistent Observation Table");
         System.out.println("-------------------------------------------------------");
 
-        Inconsistency<Integer> inconsistency;
+        Inconsistency<String> inconsistency;
         while (!table.isConsistent()) {
             inconsistency = table.findInconsistency();
-            Word<Integer> suffix = findDistinguishingSuffix(inconsistency);
+            Word<String> suffix = findDistinguishingSuffix(inconsistency);
             if (suffix != null) {
-                List<Word<Integer>> suffixes = new ArrayList<>(suffix.suffixes(false));
+                List<Word<String>> suffixes = new ArrayList<>(suffix.suffixes(false));
                 suffixes.remove(Word.epsilon());
                 table.addSuffixes(suffixes, mqOracle);
             }
@@ -203,28 +206,27 @@ public final class AbstractMealyLearner1 {
         return true;
     }
 
-    protected void refineTableShortPrefixes(DefaultQuery<Integer, Word<Integer>> ce) throws IOException {
+    protected void refineTableShortPrefixes(DefaultQuery<String, Word<String>> ce) throws IOException {
         promptEnterKey("refine the hypothesis");
-        Word<Integer> prefix = ce.getPrefix().concat(ce.getSuffix());
+        Word<String> prefix = ce.getPrefix().concat(ce.getSuffix());
         table.addShortPrefixes(prefix.prefixes(false), mqOracle);
 
         System.out.println("Refined table: ");
         tableWriter.write(table, System.out);
     }
 
-    protected void refineTableColumns(DefaultQuery<Integer, Word<Integer>> ce) throws IOException {
-        promptEnterKey("refine the hypothesis");
-        Word<Integer> word = ce.getInput();
+    protected void refineTableColumns(DefaultQuery<String, Word<String>> ce) throws IOException {
+        Word<String> word = ce.getInput();
 
         int state = 0;
 
-        Word<Integer> query;
-        Word<Integer> output;
-        Word<Integer> suffix = Word.epsilon();
+        Word<String> query;
+        Word<String> output;
+        Word<String> suffix = Word.epsilon();
 
-        Integer lastOutputSymbol;
-        Integer prevLastOutputSymbol = ce.getOutput().lastSymbol();
-        for (Word<Integer> prefix : word.prefixes(false)) {
+        String lastOutputSymbol;
+        String prevLastOutputSymbol = ce.getOutput().lastSymbol();
+        for (Word<String> prefix : word.prefixes(false)) {
             suffix = word.suffix(word.length() - prefix.length());
 
             state = hypothesis.getState(prefix);
@@ -238,7 +240,7 @@ public final class AbstractMealyLearner1 {
         }
 
         if (suffix.length()>0) {
-            List<Word<Integer>> suffixes = new ArrayList<>(suffix.suffixes(false));
+            List<Word<String>> suffixes = new ArrayList<>(suffix.suffixes(false));
             suffixes.remove(Word.epsilon());
             table.addSuffixes(suffixes, mqOracle);
         } else {
@@ -249,21 +251,21 @@ public final class AbstractMealyLearner1 {
         tableWriter.write(table, System.out);
     }
 
-    protected CompactMealy<Integer, Integer> getPartialModel() {
-        CompactMealy<Integer, Integer> hypothesis = new CompactMealy<>(inputs);
+    protected CompactMealy<String, String> getPartialModel() {
+        CompactMealy<String, String> hypothesis = new CompactMealy<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
 
-        List<Row<Integer>> shortPrefixRows = table.getShortPrefixRows();
-        List<Row<Integer>> allRows = new ArrayList<>(table.getAllRows());
+        List<Row<String>> shortPrefixRows = table.getShortPrefixRows();
+        List<Row<String>> allRows = new ArrayList<>(table.getAllRows());
 
         // Creating states
-        for (Row<Integer> row : shortPrefixRows) {
+        for (Row<String> row : shortPrefixRows) {
             int state = hypothesis.addIntState();
             stateMap.add(row.getRowContentId(), state);
         }
 
         // Creating dummy states
-        for (Row<Integer> row : allRows) {
+        for (Row<String> row : allRows) {
             int id = row.getRowContentId();
             if (stateMap.contains(id))
                 continue;
@@ -272,18 +274,18 @@ public final class AbstractMealyLearner1 {
         }
 
         // Transition relation
-        for (Row<Integer> row : shortPrefixRows) {
+        for (Row<String> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
                 hypothesis.setInitial(state, true);
             }
 
             for (int i = 0; i < inputs.size(); i++) {
-                Row<Integer> successorRow = row.getSuccessor(i);
+                Row<String> successorRow = row.getSuccessor(i);
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                Word<Integer> output = table.cellContents(row,
+                Word<String> output = table.cellContents(row,
                         table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
-                CompactMealyTransition<Integer> t = hypothesis.getTransition(state, inputs.getSymbol(i));
+                CompactMealyTransition<String> t = hypothesis.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
                     hypothesis.addTransition(state, inputs.getSymbol(i), successorState, output.firstSymbol());
             }
@@ -291,36 +293,44 @@ public final class AbstractMealyLearner1 {
         return hypothesis;
     }
 
-    protected CompactMealy<Integer, Integer> getHypothesisModel() {
-        promptEnterKey("extract the hypothesis");
-        CompactMealy<Integer, Integer> hypothesis = new CompactMealy<>(inputs);
+    protected CompactMealy<String, String> getHypothesisModel() {
+        CompactMealy<String, String> hypothesis = new CompactMealy<>(inputs);
         List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
         statePrefixMap = new ArrayList<>(table.numberOfRows());
 
-        List<Row<Integer>> shortPrefixRows = table.getShortPrefixRows();
+        List<Row<String>> shortPrefixRows = table.getShortPrefixRows();
 
         // Creating states
-        for (Row<Integer> row : shortPrefixRows) {
+        for (Row<String> row : shortPrefixRows) {
+
+
             if (stateMap.contains(row.getRowContentId()))
                 continue;
             int state = hypothesis.addIntState();
             stateMap.add(row.getRowContentId(), state);
             statePrefixMap.add(state, row.getLabel());
+            System.out.println(row.getRowContentId() + " mapps to " + state);
         }
 
         // Transition relation
-        for (Row<Integer> row : shortPrefixRows) {
+        for (Row<String> row : shortPrefixRows) {
             int state = stateMap.get(row.getRowContentId());
             if (row.getLabel().isEmpty()) {
                 hypothesis.setInitial(state, true);
             }
-
+            System.out.println("State: " + row.getLabel());
+            
             for (int i = 0; i < inputs.size(); i++) {
-                Row<Integer> successorRow = row.getSuccessor(i);
+                
+                Row<String> successorRow = row.getSuccessor(i);
+                System.out.println("Succ: "+successorRow.getLabel());
+                System.out.println("Input: "+ inputs.getSymbol(i));
+                System.out.println("ContentID: " + successorRow.getRowContentId());
+
                 int successorState = stateMap.get(successorRow.getRowContentId());
-                Word<Integer> output = table.cellContents(row,
+                Word<String> output = table.cellContents(row,
                         table.getSuffixes().indexOf(Word.fromSymbols(inputs.getSymbol(i))));
-                CompactMealyTransition<Integer> t = hypothesis.getTransition(state, inputs.getSymbol(i));
+                CompactMealyTransition<String> t = hypothesis.getTransition(state, inputs.getSymbol(i));
                 if (t == null)
                     hypothesis.addTransition(state, inputs.getSymbol(i), successorState, output.firstSymbol());
             }
@@ -328,11 +338,11 @@ public final class AbstractMealyLearner1 {
         return hypothesis;
     }
 
-    protected Word<Integer> findDistinguishingSuffix(Inconsistency<Integer> inconsistency) {
+    protected Word<String> findDistinguishingSuffix(Inconsistency<String> inconsistency) {
         int inputIdx = inputs.getSymbolIndex(inconsistency.getSymbol());
 
-        Row<Integer> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
-        Row<Integer> secondSuccessor = inconsistency.getSecondRow().getSuccessor(inputIdx);
+        Row<String> firstSuccessor = inconsistency.getFirstRow().getSuccessor(inputIdx);
+        Row<String> secondSuccessor = inconsistency.getSecondRow().getSuccessor(inputIdx);
 
         int numSuffixes = table.getSuffixes().size();
 
@@ -340,14 +350,14 @@ public final class AbstractMealyLearner1 {
             Object firstOutput = table.cellContents(firstSuccessor, i);
             Object secondOutput = table.cellContents(secondSuccessor, i);
             if (!firstOutput.equals(secondOutput)) {
-                Integer sym = inputs.getSymbol(inputIdx);
-                Word<Integer> suffix = table.getSuffixes().get(i);
+                String sym = inputs.getSymbol(inputIdx);
+                Word<String> suffix = table.getSuffixes().get(i);
                 return suffix.prepend(sym);
             }
         }
         throw new IllegalArgumentException("Bogus inconsistency");
     }
-
+    
     public void promptEnterKey(String prompt) {
         System.out.println("Press \"ENTER\" to continue to " + prompt + "...");
         try {
@@ -380,5 +390,18 @@ public final class AbstractMealyLearner1 {
             }
         }
         return mealy;
+    }
+
+    private static class MyMapper implements SULMapper<String, String, Integer, Integer>
+    {
+        @Override
+        public Integer mapInput(String abstractInput) {
+            return Integer.valueOf(abstractInput);
+        }
+
+        @Override
+        public String mapOutput(Integer concreteOutput) {
+            return Integer.toString(concreteOutput);
+        }
     }
 }

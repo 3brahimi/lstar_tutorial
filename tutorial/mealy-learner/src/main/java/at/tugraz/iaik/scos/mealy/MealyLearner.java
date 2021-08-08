@@ -72,7 +72,7 @@ public final class MealyLearner {
         inputs      = target.getInputAlphabet();
         sul         = new MealySimulatorOracle<>(target);
         mqOracle    = new MealyCounterOracle<>(sul, "Output Queries");
-        eqMqOracle    = new MealyCounterOracle<>(sul, "Output Queries during EQ testing");
+        eqMqOracle  = new MealyCounterOracle<>(sul, "Output Queries during EQ testing");
         eqOracle    = new MealyWMethodEQOracle<>(eqMqOracle, EXPLORATION_DEPTH);
         table       = new GenericObservationTable<>(inputs);
         tableWriter = new ObservationTableASCIIWriter<>();
