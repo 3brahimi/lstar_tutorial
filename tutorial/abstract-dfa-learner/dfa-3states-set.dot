@@ -1,0 +1,19 @@
+digraph g {
+
+	s0 [shape="circle" label="0"];
+	s1 [shape="doublecircle" label="1"];
+	s2 [shape="circle" label="2"];
+	s0 -> s1 [label="{1,4,7, ...}"];
+	s0 -> s2 [label="{2,5,8, ...}"];
+	s0 -> s0 [label="{3,6,9, ...}"];
+	s1 -> s0 [label="{2,5,8, ...}"];
+	s1 -> s1 [label="{3,6,9, ...}"];
+	s1 -> s2 [label="{1,4,7, ...}"];
+	s2 -> s1 [label="{2,5,8, ...}"];
+	s2 -> s2 [label="{3,6,9, ...}"];
+	s2 -> s0 [label="{1,4,7, ...}"];
+
+__start0 [label="" shape="none" width="0" height="0"];
+__start0 -> s0;
+
+}

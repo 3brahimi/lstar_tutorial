@@ -30,6 +30,7 @@ import de.learnlib.datastructure.observationtable.writer.ObservationTableASCIIWr
 import de.learnlib.filter.statistic.oracle.DFACounterOracle;
 import de.learnlib.oracle.equivalence.DFAWMethodEQOracle;
 import de.learnlib.oracle.membership.SimulatorOracle.DFASimulatorOracle;
+import de.learnlib.oracle.membership.MappedOracle;
 import net.automatalib.automata.fsa.DFA;
 import net.automatalib.automata.fsa.NFA;
 import net.automatalib.automata.fsa.impl.compact.CompactDFA;
@@ -41,7 +42,7 @@ import net.automatalib.words.Word;
 import net.automatalib.words.impl.Alphabets;
 
 /**
- * This example demonstrates the classical Angluin LStar for DFAs.
+ * This example demonstrates the role of abstraction in automata learning.
  * 
  * @author Masoud Ebrahimi
  */
@@ -61,17 +62,17 @@ public final class AbstractDFALearner {
 
     public static void main(String[] args) throws IOException {
         AbstractDFALearner experiment = new AbstractDFALearner();
-        experiment.learn(constructSUL(7));
+        experiment.learn(constructSUL(4));
     }
 
     public void learn(CompactDFA<Integer> target) throws IOException {
         // @formatter:off
-        inputs      = Alphabets.integers(1, 4);
+        inputs      = Alphabets.integers(1, 12);
         sul         = new DFASimulatorOracle<>(target);
         mqOracle    = new DFACounterOracle<>(sul, "Membership Queries");
         eqMqOracle  = new DFACounterOracle<>(sul, "Membership Queries (Conformance Testing)");
         eqOracle    = new DFAWMethodEQOracle<>(eqMqOracle, EXPLORATION_DEPTH);
-        table       = new GenericObservationTable<Integer, Boolean>(inputs);
+        table       = new GenericObservationTable<>(inputs);
         tableWriter = new ObservationTableASCIIWriter<>(input -> input.toString(), output -> (output ? "1" : "0"), true);
         // @formatter:on
 
@@ -340,8 +341,7 @@ public final class AbstractDFALearner {
     public static CompactDFA<Integer> constructSUL(int n) {
         // input alphabet contains Integers 'a'..'b'
         Alphabet<Integer> sigma = Alphabets.integers(1, 1000);
-
-        // @formatter:off
+        
         // create automaton
         CompactDFA<Integer> dfa = new CompactDFA<>(sigma);
         

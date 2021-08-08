@@ -65,7 +65,7 @@ public final class MealyLearner {
     }
 
     protected void learn(CompactMealy<Character, Character> target) throws IOException {
-        System.out.println("Learning the following Moore machine...");
+        System.out.println("Learning the following Mealy machine...");
         GraphDOT.write(target, target.getInputAlphabet(), System.out);
 
         // @formatter:off
@@ -358,7 +358,7 @@ public final class MealyLearner {
     }
 
     /**
-     * @return example moore
+     * @return example mealy
      */
     private static CompactMealy<Character, Character> constructSUL() {
         // input alphabet contains characters 'a'..'b'
