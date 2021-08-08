@@ -19,7 +19,10 @@ package at.tugraz.iaik.scos.abstraction.mealy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 import de.learnlib.api.SUL;
 import de.learnlib.api.oracle.MembershipOracle.MealyMembershipOracle;
@@ -65,7 +68,7 @@ public final class AbstractMealyLearner1 {
     public static void main(String[] args) throws IOException {
         AbstractMealyLearner1 experiment = new AbstractMealyLearner1();
         MyMapper mapper = new MyMapper();
-        MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(constructSUL(2));
+        MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(constructSUL(4));
         SUL<String, String> sul = SULMappers.apply(mapper, simulator);
         experiment.learn(sul);
     }
@@ -166,10 +169,12 @@ public final class AbstractMealyLearner1 {
         GraphDOT.write(model, inputs, System.out);
         System.out.println();
 
+        System.out.println("Intermediate tables: ");
         while (!table.isClosed()) {
             Row<String> unclosed = table.findUnclosedRow();
             Word<String> prefix = unclosed.getLabel();
             table.addShortPrefixes(prefix.prefixes(false), mqOracle.asOracle());
+            tableWriter.write(table, System.out);
         }
 
         model = getPartialModel();
@@ -253,24 +258,24 @@ public final class AbstractMealyLearner1 {
 
     protected CompactMealy<String, String> getPartialModel() {
         CompactMealy<String, String> hypothesis = new CompactMealy<>(inputs);
-        List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
+        Map<Integer, Integer> stateMap = new HashMap();
 
         List<Row<String>> shortPrefixRows = table.getShortPrefixRows();
         List<Row<String>> allRows = new ArrayList<>(table.getAllRows());
-
+        
         // Creating states
         for (Row<String> row : shortPrefixRows) {
             int state = hypothesis.addIntState();
-            stateMap.add(row.getRowContentId(), state);
+            stateMap.put(row.getRowContentId(), state);
         }
 
         // Creating dummy states
         for (Row<String> row : allRows) {
             int id = row.getRowContentId();
-            if (stateMap.contains(id))
+            if (stateMap.containsKey(id))
                 continue;
             int state = hypothesis.addIntState();
-            stateMap.add(id, state);
+            stateMap.put(id, state);
         }
 
         // Transition relation
@@ -295,7 +300,7 @@ public final class AbstractMealyLearner1 {
 
     protected CompactMealy<String, String> getHypothesisModel() {
         CompactMealy<String, String> hypothesis = new CompactMealy<>(inputs);
-        List<Integer> stateMap = new ArrayList<>(table.numberOfRows());
+        Map<Integer, Integer> stateMap = new HashMap();
         statePrefixMap = new ArrayList<>(table.numberOfRows());
 
         List<Row<String>> shortPrefixRows = table.getShortPrefixRows();
@@ -304,10 +309,10 @@ public final class AbstractMealyLearner1 {
         for (Row<String> row : shortPrefixRows) {
 
 
-            if (stateMap.contains(row.getRowContentId()))
+            if (stateMap.containsKey(row.getRowContentId()))
                 continue;
             int state = hypothesis.addIntState();
-            stateMap.add(row.getRowContentId(), state);
+            stateMap.put(row.getRowContentId(), state);
             statePrefixMap.add(state, row.getLabel());
             System.out.println(row.getRowContentId() + " mapps to " + state);
         }
@@ -394,8 +399,13 @@ public final class AbstractMealyLearner1 {
 
     private static class MyMapper implements SULMapper<String, String, Integer, Integer>
     {
+        Random rand = new Random();
+        int min = 1;
+        int max = 1000;
+
         @Override
         public Integer mapInput(String abstractInput) {
+            // return rand.nextInt((max - min) + 1) + min;
             return Integer.valueOf(abstractInput);
         }
 
