@@ -68,7 +68,10 @@ public final class AbstractMealyLearner1 {
     public static void main(String[] args) throws IOException {
         AbstractMealyLearner1 experiment = new AbstractMealyLearner1();
         MyMapper mapper = new MyMapper();
-        MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(constructSUL(4));
+        CompactMealy<Integer, Integer> mealy = constructSUL(4);
+        Alphabet<Integer> inputs = Alphabets.integers(1, 8);
+        Visualization.visualize(mealy, inputs);
+        MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(mealy);
         SUL<String, String> sul = SULMappers.apply(mapper, simulator);
         experiment.learn(sul);
     }
