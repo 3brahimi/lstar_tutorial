@@ -66,19 +66,20 @@ public final class AbstractMealyLearner1 {
     MealyMachine<Integer, String, ?, String> hypothesis;
 
     public static void main(String[] args) throws IOException {
+        int states = 4;
         AbstractMealyLearner1 experiment = new AbstractMealyLearner1();
-        MyMapper mapper = new MyMapper();
-        CompactMealy<Integer, Integer> mealy = constructSUL(4);
+        CompactMealy<Integer, Integer> mealy = constructSUL(states);
         Alphabet<Integer> inputs = Alphabets.integers(1, 8);
         Visualization.visualize(mealy, inputs);
         MealySimulatorSUL<Integer, Integer> simulator = new MealySimulatorSUL<>(mealy);
+        MyMapper mapper = new MyMapper(states);
         SUL<String, String> sul = SULMappers.apply(mapper, simulator);
         experiment.learn(sul);
     }
 
     protected void learn(SUL<String, String> target) throws IOException {
         // @formatter:off
-        inputs      = Alphabets.fromArray(new String[]{"1","2","3"});
+        inputs      = Alphabets.fromArray(new String[]{"n%4=0","n%4=1","n%4=2", "n%4=3"});
         sul         = new SULOracle<>(target);
         mqOracle    = new MealyCounterOracle<>(sul, "Output Queries");
         eqMqOracle  = new MealyCounterOracle<>(sul, "Output Queries during EQ testing");
@@ -402,19 +403,74 @@ public final class AbstractMealyLearner1 {
 
     private static class MyMapper implements SULMapper<String, String, Integer, Integer>
     {
-        Random rand = new Random();
-        int min = 1;
-        int max = 1000;
+        // internal state of the mapper
+        int states = -1;
+        int lastConcreteInput = -1;
+        int lastConcreteOutput = -1;
+        String lastAbstractInput;
+        String lastAbstractOutput;
 
-        @Override
-        public Integer mapInput(String abstractInput) {
-            // return rand.nextInt((max - min) + 1) + min;
-            return Integer.valueOf(abstractInput);
+        public MyMapper( int states ) {
+            this.states = states;
+        }
+
+        public Integer randomInput(String abstractInput) {
+            // for divergent uncomment the following block
+            Random rand = new Random();
+            int min = 1, max = 1000;
+            return rand.nextInt((max - min) + 1) + min;
         }
 
         @Override
+        // Mapper gets an abstract input from the learner and concretizes it to invoke the SUL
+        public Integer mapInput(String abstractInput) {
+            // for divergent uncomment the following 
+            // return randomInput(abstractInput);
+            
+            Random rand = new Random();
+            int min = 1, max = 1000;
+            int randInteger = rand.nextInt((max - min) + 1) + min;
+            int mod = 0;
+            
+            // for divergent comment the following 
+            switch(abstractInput.toLowerCase())
+            {
+                case "n%4=0":
+                    mod = randInteger % states;
+                    lastConcreteInput = randInteger - mod;
+                    break;
+                case "n%4=1":
+                    mod = randInteger % states;
+                    lastConcreteInput = randInteger - mod + 1;
+                    break;
+                case "n%4=2":
+                    mod = randInteger % states;
+                    lastConcreteInput = randInteger - mod + 2;
+                    break;
+                case "n%4=3":
+                    mod = randInteger % states;
+                    lastConcreteInput = randInteger - mod + 3;
+                    break;
+                default:
+                    System.out.print("Unaccepted abstract input!" + abstractInput);
+                    System.exit(-1);
+            }
+            while(lastConcreteInput < 1 ) {
+                lastConcreteInput += states;
+            }
+            while(lastConcreteInput > 1000 ) {
+                lastConcreteInput -= states;
+            }
+            System.out.println("RandInteger: " + Integer.toString(randInteger) + ", ConcreteInput: " + Integer.toString(lastConcreteInput));
+            return lastConcreteInput;
+        }
+
+        @Override
+        // Mapper observes a concrete output of the SUL but returns an abstract output to the Learner
         public String mapOutput(Integer concreteOutput) {
-            return Integer.toString(concreteOutput);
+            int diff = Math.abs( concreteOutput - lastConcreteInput );
+            lastAbstractOutput = "n+" + Integer.toString(diff);
+            return lastAbstractOutput;
         }
     }
 }
